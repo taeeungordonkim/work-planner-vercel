@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>AI 업무 기획 도우미</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React 18 UMD -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel (브라우저에서 JSX 사용) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+      ::-webkit-scrollbar{width:8px;height:8px}
+      ::-webkit-scrollbar-track{background:#f1f1f1;border-radius:10px}
+      ::-webkit-scrollbar-thumb{background:#888;border-radius:10px}
+      ::-webkit-scrollbar-thumb:hover{background:#555}
+    </style>
+  </head>
+  <body class="bg-slate-50 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useMemo, useCallback } = React;
+
+      const PlanSection = {
+        TITLE: 'title',
+        SUMMARY: 'summary',
+        PURPOSE: 'purpose',
+        KFS: 'kfs',
+        PLAN: 'plan',
+      };
+
+      const SECTIONS = [
+        { id: PlanSection.TITLE,   title: '업무 제목', placeholder: '예: 2025년 4분기 신규 고객 확보 캠페인', description: '핵심 의미를 살려 간결하고 명확하게 작성합니다.' },
+        { id: PlanSection.SUMMARY, title: '핵심 내용', placeholder: '업무의 전반적인 내용을 3~4문장으로 요약', description: '누가, 무엇을, 왜/어떻게 하는지를 드러냅니다.' },
+        { id: PlanSection.PURPOSE, title: '목적/배경/필요성', placeholder: '왜 해야 하는지, 기대 효과는 무엇인지', description: '목적·배경·필요성을 구분해 작성합니다.' },
+        { id: PlanSection.KFS,     title: 'KFS (핵심 성공 요인)', placeholder: '3~5개 항목으로 요약 (지표/관리 포인트)', description: '성공을 좌우하는 관리 포인트를 정의합니다.' },
+        { id: PlanSection.PLAN,    title: '방안/일정/예산', placeholder: '실행 방안(단계)·마일스톤·예산 항목 초안', description: '실행 관점으로 구조화합니다.' },
+      ];
+
+      const MagicWandIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.25278V6.25278C12 5.56065 12.5607 5 13.2528 5V5C13.9449 5 14.5056 5.56065 14.5056 6.25278V6.25278" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M17.7472 9.5V9.5C18.4393 9.5 19 10.0607 19 10.7528V10.7528C19 11.4449 18.4393 12 17.7472 12V12" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 17.7472V17.7472C9.5 18.4393 10.0607 19 10.7528 19V19C11.4449 19 12 18.4393 12 17.7472V17.7472" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13.2528V13.2528C5 13.9449 5.56065 14.5056 6.25278 14.5056V14.5056C6.9449 14.5056 7.50556 13.9449 7.50556 13.2528V13.2528" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M10.8284 2L9.41421 3.41421C8.63316 4.19526 8.63316 5.46159 9.41421 6.24264L14.7574 11.5858C15.5384 12.3668 16.8047 12.3668 17.5858 11.5858L19 10.1716L10.8284 2Z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.5858L18.4142 16C16.8517 17.5625 14.3861 17.236 13.2426 15.7574L9.24264 10.7574C8.09918 9.27883 8.42566 7.14833 10 5.58579L12.5858 3" />
+        </svg>
+      );
+
+      const SpinnerIcon = () => (
+        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      );
+
+      async function callBackend(section, plan) {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ section, plan })
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`서버 오류(${res.status}): ${t}`);
+        }
+        const data = await res.json();
+        return (data.text || '').trim();
+      }
+
+      function SectionPanel({ section, value, onValueChange, onGenerate, isLoading }) {
+        return (
+          <div className="flex flex-col h-full">
+            <div className="mb-4">
+              <label htmlFor={section.id} className="text-xl font-semibold text-slate-800 block">{section.title}</label>
+              <p className="text-sm text-slate-500 mt-1">{section.description}</p>
+            </div>
+
+            <div className="relative flex-grow">
+              <textarea
+                id={section.id}
+                value={value}
+                onChange={(e) => onValueChange(e.target.value)}
+                placeholder={section.placeholder}
+                className="w-full h-96 p-4 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow duration-200 text-slate-700"
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={onGenerate}
+                disabled={isLoading}
+                className="flex items-center justify-center px-5 py-2.5 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 disabled:bg-slate-400 disabled:cursor-not-allowed"
+              >
+                {isLoading ? <SpinnerIcon/> : <MagicWandIcon/>}
+                <span className="ml-2">{isLoading ? '생성 중...' : 'AI로 내용 생성'}</span>
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      function Sidebar({ activeSection, onSectionChange }) {
+        return (
+          <nav className="w-64 bg-white shadow-md p-4 flex-shrink-0 hidden md:flex md:flex-col">
+            <div className="text-2xl font-bold text-blue-600 mb-8 border-b pb-4">기획 단계</div>
+            <ul className="space-y-2">
+              {SECTIONS.map((section) => (
+                <li key={section.id}>
+                  <button
+                    onClick={() => onSectionChange(section.id)}
+                    className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                      activeSection === section.id
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    {section.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        );
+      }
+
+      function App(){
+        const [workPlan, setWorkPlan] = useState({
+          [PlanSection.TITLE]: '',
+          [PlanSection.SUMMARY]: '',
+          [PlanSection.PURPOSE]: '',
+          [PlanSection.KFS]: '',
+          [PlanSection.PLAN]: '',
+        });
+        const [activeSection, setActiveSection] = useState(PlanSection.TITLE);
+        const [loading, setLoading] = useState({
+          [PlanSection.TITLE]: false,
+          [PlanSection.SUMMARY]: false,
+          [PlanSection.PURPOSE]: false,
+          [PlanSection.KFS]: false,
+          [PlanSection.PLAN]: false,
+        });
+        const [error, setError] = useState(null);
+
+        const currentSection = useMemo(
+          () => SECTIONS.find(s => s.id === activeSection) || SECTIONS[0],
+          [activeSection]
+        );
+
+        const handleInputChange = useCallback((section, value) => {
+          setWorkPlan(prev => ({ ...prev, [section]: value }));
+        }, []);
+
+        const handleGenerate = useCallback(async (section) => {
+          setLoading(prev => ({ ...prev, [section]: true }));
+          setError(null);
+          try {
+            const text = await callBackend(section, workPlan);
+            setWorkPlan(prev => ({ ...prev, [section]: text }));
+          } catch (e) {
+            console.error(e);
+            setError(e.message || '생성 중 오류가 발생했습니다.');
+          } finally {
+            setLoading(prev => ({ ...prev, [section]: false }));
+          }
+        }, [workPlan]);
+
+        return (
+          <div className="flex h-screen font-sans bg-slate-100">
+            <Sidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+
+            <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+              <div className="max-w-4xl mx-auto">
+                <header className="mb-6">
+                  <h1 className="text-3xl md:text-4xl font-bold text-slate-800">AI 업무 기획 도우미</h1>
+                  <p className="text-slate-500 mt-1">AI의 도움으로 핵심을 빠르게 구조화하세요.</p>
+                </header>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg mb-6" role="alert">
+                    <strong className="font-semibold">오류:</strong>
+                    <span className="ml-1">{error}</span>
+                  </div>
+                )}
+
+                <div className="bg-white p-6 md:p-8 rounded-2xl shadow-lg transition-all duration-300">
+                  <SectionPanel
+                    key={currentSection.id}
+                    section={currentSection}
+                    value={workPlan[currentSection.id]}
+                    onValueChange={(v) => handleInputChange(currentSection.id, v)}
+                    onGenerate={() => handleGenerate(currentSection.id)}
+                    isLoading={loading[currentSection.id]}
+                  />
+                </div>
+
+                <footer className="text-center mt-8 text-slate-400 text-sm">
+                  <p>© {new Date().getFullYear()} Work Planner AI. All rights reserved.</p>
+                </footer>
+              </div>
+            </main>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<React.StrictMode><App/></React.StrictMode>);
+    </script>
+  </body>
+</html>

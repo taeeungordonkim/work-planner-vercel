@@ -1,0 +1,5 @@
+node_modules
+.vercel
+.env*
+GEMINI_API_KEY=AIzaSyD7xrJBp7BWLbo-ruJmCZqjQIisJzwlv3w
+PORT=3000
