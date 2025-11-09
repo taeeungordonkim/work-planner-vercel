@@ -1,5 +1,10 @@
 {
   "functions": {
-    "api/*.js": { "runtime": "nodejs20.x", "maxDuration": 20, "memory": 1024, "regions": ["icn1","hnd1"] }
-  }
+    "api/*.js": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 20,
+      "memory": 1024
+    }
+  },
+  "cleanUrls": true
 }
