@@ -1,4 +1,8 @@
 // api/generate.js
+// -----------------------------------------------------------
+// Google Gemini API 기반 서버리스 함수
+// (Vercel 환경변수: GEMINI_API_KEY 필요)
+// -----------------------------------------------------------
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const PlanSection = {
@@ -14,49 +18,59 @@ function buildPrompt(section, plan = {}) {
   const summary = plan.summary || "미정";
   const purpose = plan.purpose || "미정";
 
-  const base = `당신은 유능한 프로젝트 매니저(PM)입니다. 다음 업무 기획 내용에 대해 요청하는 항목을 전문가 수준으로 작성해 주세요.
-결과물은 한국어로, 친절하고 전문적인 어조로 작성해 주세요.
-
-### 현재까지의 업무 기획 내용
-- **업무 제목:** ${title}
-- **핵심 내용:** ${summary}
-- **목적/배경/필요성:** ${purpose}
-
----`;
+  const base = `당신은 한국 대기업 대상의 시니어 프로젝트 매니저 겸 컨설턴트입니다.
+결과물은 한국어로, 간결하고 전문적인 톤으로 작성합니다.
+---
+[프로젝트 맥락]
+- 업무 제목: ${title}
+- 핵심 내용: ${summary}
+- 목적/배경/필요성: ${purpose}
+`;
 
   switch (section) {
     case PlanSection.TITLE:
-      return `당신은 뛰어난 카피라이터입니다. 다음 업무 내용을 가장 잘 나타내는 간결하고 명확한 **업무 제목**을 5개 제안해주세요.
-각 제목은 한 줄로 제시하고, 별도의 설명은 붙이지 마세요.
+      return `${base}
+[요청] 위 내용을 가장 잘 나타내는 간결한 업무 제목 5개를 제시하라.
+각 제목은 한 줄로 제시하고, 괄호 안에 핵심 포인트를 덧붙여라.`;
 
-### 업무 내용
-- **핵심 내용:** ${summary}
-- **목적/배경:** ${purpose}`;
     case PlanSection.SUMMARY:
       return `${base}
-위 내용을 바탕으로, 이 업무의 **핵심 내용**을 3~4문장으로 요약해 주세요. 누가, 무엇을, 어떻게, 왜 하는지가 명확히 드러나도록 작성해 주세요.`;
+[요청] 이 업무의 핵심 내용을 요약하라.
+- 1문장 요약
+- 주요 실행 내용(불릿 4~6개)
+- KPI/성과지표(표)
+- 리스크와 대응 방안(불릿 3개)`;
+
     case PlanSection.PURPOSE:
       return `${base}
-위 내용을 바탕으로, 이 업무의 **목적, 배경, 그리고 필요성**을 구체적으로 서술해 주세요. 각 항목을 명확히 구분하여 작성해 주세요.`;
+[요청] 목적·배경·필요성을 구체적으로 서술하라.
+- 배경(3줄)
+- 문제정의(2줄)
+- 목표(KPI 중심)
+- 성공기준(정량·정성)
+- 가정과 제약`;
+
     case PlanSection.KFS:
       return `${base}
-위 내용을 바탕으로, 이 업무를 성공적으로 완수하기 위한 **핵심 성공 요인(Key Factors for Success)**을 3가지 제안하고, 각 요인에 대한 간단한 설명을 덧붙여 주세요.`;
+[요청] 성공을 위해 관리해야 할 핵심 성공 요인(KFS) 3~5개를 제시하라.
+각 항목은 정의·지표·리스크·선행조건을 포함하라.`;
+
     case PlanSection.PLAN:
       return `${base}
-위 내용을 바탕으로, 업무 수행을 위한 **개략적인 방안, 예상 일정, 그리고 필요한 예산 항목**에 대한 초안을 작성해 주세요.
-전문적인 보고서 형식으로 구조화하여 제안해 주세요.
-- **방안:** 구체적 실행 단계
-- **일정:** 주요 마일스톤(1주차, 2주차 등)
-- **예산:** 인건비/마케팅비/개발비 등 분류`;
+[요청] 실행계획(방안·일정·예산)을 구조화하라.
+- 추진전략(불릿)
+- 단계별 일정표(표)
+- 예산 초안(표)
+- 리스크 레지스터(Top5)
+- 다음 2주 실행체크리스트`;
     default:
-      return "";
+      return base;
   }
 }
 
-// Vercel Node API Route: (req, res)
 export default async function handler(req, res) {
+  // GET으로 호출 시 단순 확인 응답
   if (req.method === "GET") {
-    // 배포 확인용 핑
     return res.status(200).send("generate function is alive");
   }
   if (req.method !== "POST") {
@@ -65,21 +79,30 @@ export default async function handler(req, res) {
 
   try {
     const { section, plan } = req.body || {};
-    if (!section) return res.status(400).json({ error: "section이 필요합니다." });
+    if (!section)
+      return res.status(400).json({ error: "section 파라미터가 필요합니다." });
 
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY 누락" });
+    if (!apiKey)
+      return res.status(500).json({ error: "GEMINI_API_KEY 누락" });
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-pro",
+    });
 
     const prompt = buildPrompt(section, plan || {});
-    const result = await model.generateContent(prompt);
-    const text = result?.response?.text?.() ?? "";
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3, topP: 0.8, maxOutputTokens: 3072 },
+    });
 
+    const text = result?.response?.text?.() ?? "";
     return res.status(200).json({ text: text.trim() });
   } catch (err) {
-    console.error("[Vercel Function Error]", err);
-    return res.status(500).json({ error: "AI 생성 중 오류가 발생했습니다." });
+    console.error("[generate.js Error]", err);
+    return res
+      .status(500)
+      .json({ error: "AI 생성 중 오류가 발생했습니다." });
   }
 }
