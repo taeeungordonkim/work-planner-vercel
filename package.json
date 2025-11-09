@@ -1,13 +1,8 @@
 {
-  "name": "ai-work-planner",
-  "version": "1.0.0",
+  "name": "work-planner-vercel",
   "private": true,
-  "scripts": {
-    "dev": "vercel dev",
-    "build": "echo \"no build step\"",
-    "start": "vercel dev"
-  },
+  "type": "module",
   "dependencies": {
-    "@google/generative-ai": "^0.21.0"
+    "@google/generative-ai": "^0.11.7"
   }
 }
